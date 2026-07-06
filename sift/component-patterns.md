@@ -13,8 +13,8 @@ sources:
   - path: internal-docs/src/web-app/22-icons.md
     last_read: 2026-04-12
 created: 2026-04-12
-updated: 2026-04-12
-last_accessed: 2026-05-07
+updated: 2026-07-06
+last_accessed: 2026-07-06
 ---
 
 Sift has two component directories: `componentsV2/` (modern, preferred) and `components/`
@@ -44,7 +44,8 @@ properties for flexible, declarative composition:
 The anatomy: define a Context type, create the context, Root provides it, child components
 consume it via a `useXxx()` hook, export as `{ Root, Child1, Child2 }`.
 
-See [[legend-v2]] for a real example of this pattern applied to the chart legend.
+The chart legend (`legendV2`) is a real example of this pattern — query codegraph
+for its current structure.
 
 ## Radix UI Themes
 
@@ -73,7 +74,7 @@ modal registry exists at `src/modals/modal_root.tsx` but should not be used for 
 
 ## Tables
 
-Three table types (see [[tables]] if it exists):
+Three table types:
 1. **Data Tables** — telemetry data, Arrow-powered, TanStack Table + Virtuoso
 2. **Search Tables** — entity listings, compound component pattern with built-in filters
 3. **Radix Tables** — lightweight, < 50 rows, no virtualization

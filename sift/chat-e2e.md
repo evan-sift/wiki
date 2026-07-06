@@ -6,7 +6,7 @@ sources:
     last_read: 2026-05-13
 created: 2026-05-13
 updated: 2026-05-13
-last_accessed: 2026-05-19
+last_accessed: 2026-07-06
 ---
 
 `chat-e2e` is a Bash harness that drives [[chat-cli]] with a scripted scenario

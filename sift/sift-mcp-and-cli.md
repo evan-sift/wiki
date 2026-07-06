@@ -2,15 +2,21 @@
 title: Sift MCP, CLI & API Surfaces
 tags: [tooling, domain-concepts]
 sources:
-  - path: rust/crates/sift_cli (sift-cli; subcommands, `mcp`, `install`), last_read: 2026-06-17
-  - path: rust/crates/sift_cli/assets/skills/claude-code/SKILL.md (agent orientation, order of preference), last_read: 2026-06-17
-  - path: rust/crates/sift_mcp/src/tool (MCP tool defs + annotations), last_read: 2026-06-17
-  - path: rust/crates/sift_mcp/src/service (MCP service logic, CEL filter fields), last_read: 2026-06-17
-  - path: rust/crates/sift_stream/README.md (Rust streaming library), last_read: 2026-06-17
-  - path: python/lib/sift_client + python/pyproject.toml (Python library), last_read: 2026-06-17
+  - path: rust/crates/sift_cli  # sift repo; sift-cli subcommands, `mcp`, `install`
+    last_read: 2026-06-17
+  - path: rust/crates/sift_cli/assets/skills/claude-code/SKILL.md  # agent orientation, order of preference
+    last_read: 2026-06-17
+  - path: rust/crates/sift_mcp/src/tool  # MCP tool defs + annotations
+    last_read: 2026-06-17
+  - path: rust/crates/sift_mcp/src/service  # MCP service logic, CEL filter fields
+    last_read: 2026-06-17
+  - path: rust/crates/sift_stream/README.md  # Rust streaming library
+    last_read: 2026-06-17
+  - path: python/lib/sift_client  # Python library; see also python/pyproject.toml
+    last_read: 2026-06-17
 created: 2026-06-17
-updated: 2026-06-17
-last_accessed: 2026-06-17
+updated: 2026-07-06
+last_accessed: 2026-07-06
 ---
 
 How an agent or developer works with Sift programmatically. There are five surfaces — the MCP server, `sift-cli`, the REST API, the `sift_client` Python library, and the `sift_stream` Rust library — and a clear order of preference between them. All of this lives in the `sift` repo (`~/code/sift`, crates under `rust/crates/`, Python under `python/`), not in `azimuth`. See [[project-overview]] for product context and [[sift-domain-concepts]] for what assets, runs, channels, rules, and reports mean.
@@ -100,6 +106,6 @@ Library module is `sift_client`, living at `python/lib/sift_client` (`client.py`
 
 `rust/crates/sift_stream` — a Rust telemetry streaming library for high-throughput ingestion (`README.md`). Task-based async architecture over bounded channels. Entry points: `SiftStreamBuilder` → `SiftStream<E, T>`, where the encoder is separated from the transport. Transport modes: `LiveStreamingOnly` (real-time gRPC, direct backpressure, no checkpointing/backups), `LiveStreamingWithBackups` (adds checkpointing, retry, disk backups), and `FileBackup` (rolling disk files, no live network). The CLI's `import backups` re-ingests files produced by the backup modes. Reference: `https://docs.rs/sift_stream/latest/sift_stream/`.
 
-Sift's product documentation is itself queryable through the API: see [[docs-search-tool]] for the `/api/v1/docs:search` and `/api/v1/docs:read` endpoints (and the `search_sift_docs` / `read_sift_doc` agent tools) used to answer "how does Sift work" questions.
+Sift's product documentation is itself queryable through the API: the `/api/v1/docs:search` and `/api/v1/docs:read` endpoints (surfaced to the Reactor agent as the `search_sift_docs` / `read_sift_doc` tools, `services/chat/tools/` + `services/repo/docs/v1/` in azimuth — query codegraph) answer "how does Sift work" questions.
 
 See [[data-fetching]] for how the frontend consumes channel data (a different, RTK-Query path), distinct from these agent/programmatic surfaces.

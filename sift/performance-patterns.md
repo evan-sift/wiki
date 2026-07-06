@@ -7,8 +7,8 @@ sources:
   - path: internal-docs/src/web-app/08-services-and-workers.md
     last_read: 2026-04-12
 created: 2026-04-12
-updated: 2026-04-16
-last_accessed: 2026-05-07
+updated: 2026-07-06
+last_accessed: 2026-07-06
 ---
 
 Sift handles high-frequency telemetry data at 60fps. The key performance pattern is
@@ -40,8 +40,9 @@ Location: `src/store/syncers/E2Syncer.tsx`
 ## Web Workers
 
 CPU-intensive data processing runs in Web Workers to avoid blocking the main thread.
-The [[channel-data-service]] is the primary example: Arrow decoding, data transformation,
-and OPFS caching all happen off-thread.
+`channelDataService` (`web-app/src/services/channelData/` — query codegraph) is the
+primary example: Arrow decoding, data transformation, and OPFS caching all happen
+off-thread.
 
 See [[worker-service-pattern]] for the shared structure across all six worker services
 (singleton + dedicated Worker, message protocols, init handshake, `appMeta` forwarding,
@@ -51,8 +52,8 @@ transferables).
 
 Processed data is cached in OPFS for instant retrieval on subsequent requests.
 OPFS is faster than IndexedDB with synchronous access in workers.
-See [[opfs-service]] for the primitive API and [[storage-service]] for the namespaced
-K/V layer. [[data-pipeline]] has the high-level cache structure.
+See [[opfs-service]] for the caller contracts and [[storage-service]] for the
+namespaced K/V layer.
 
 ## Memoization
 

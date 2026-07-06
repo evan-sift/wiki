@@ -7,6 +7,38 @@ Lint truncates to the last 50 entries; older entries are archived to `log-archiv
 
 ---
 
+## [2026-07-06] restructure | normative-only vault (codegraph owns structure)
+
+Restructured the vault around one principle: codegraph now answers "what the
+code IS" (structure, call paths), so the wiki keeps only normative content —
+conventions, rules, gotchas, recipes, decision records, domain semantics,
+operational runbooks. (The vault flatten to `~/wiki` was done separately,
+before this.)
+
+- **`_archive/` convention introduced.** Whole pages that were descriptive
+  code walkthroughs moved (git mv) to `sift/_archive/` rather than deleted:
+  channel-data-service, data-pipeline, docs-search-tool, explore2-slice,
+  legend-v2, panel-types. Archived pages are excluded from the index and from
+  check-stale (which only scans the vault root). Before archiving
+  explore2-slice, its two normative nuggets (`ignoreCleanup: true` hydration
+  semantics; the sharelink-compat rationale for `sharelinkRegression/`) were
+  folded into [[state-management]].
+- **Deleted `tables.md`** — a zero-content stub from the Notion migration.
+- **Slimmed split pages in place** (normative content kept, code-structure
+  walkthroughs dropped; git history preserves them): [[chat-cli]],
+  [[chat-event-types]], [[coding-sandbox]], [[data-visualization]],
+  [[directory-structure]], [[opfs-service]], [[scv]], [[skills]],
+  [[storage-service]].
+- **[[artifacts]] deliberately untouched** — it documents an unmerged branch
+  (ENG-10586) that codegraph cannot see; revisit after merge.
+- Rewrote wikilinks to archived/deleted pages in surviving pages (concept named
+  in prose or pointed at codegraph). Fixed orphans: [[routing]] and
+  [[rich-text-editor-options]] now linked from [[project-overview]]. Converted
+  [[sift-domain-concepts]] and [[sift-mcp-and-cli]] `sources:` to the schema's
+  `path:`/`last_read:` map form so check-stale sees them. Dropped the
+  unregistered `sandbox` tag from [[coding-sandbox]] (covered by `agents`).
+  Regenerated the index (28 pages).
+
 ## [2026-06-19] ingest | skills library (ENG-12120)
 
 Created [[skills]]. The "skills library" feature deferred on 2026-06-18 (then

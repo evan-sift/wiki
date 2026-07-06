@@ -2,21 +2,30 @@
 title: Sift Domain Concepts
 tags: [domain-concepts, architecture]
 sources:
-  - protos/sift/assets/v1/assets.proto (Asset, ListAssets), last_read: 2026-06-17
-  - protos/sift/runs/v2/runs.proto (Run, ListRuns), last_read: 2026-06-17
-  - protos/sift/families/v1/families.proto (Family, FamilyRun, ListFamilies), last_read: 2026-06-17
-  - protos/sift/channels/v3/channels.proto (Channel, ListChannels), last_read: 2026-06-17
-  - protos/sift/ingestion_configs/v2/ingestion_configs.proto (IngestionConfig, FlowConfig, ChannelConfig), last_read: 2026-06-17
-  - protos/sift/rules/v1/rules.proto (Rule, RuleCondition, RuleAction, AnnotationActionConfiguration), last_read: 2026-06-17
-  - protos/sift/annotations/v1/annotations.proto (Annotation, AnnotationType), last_read: 2026-06-17
-  - protos/sift/reports/v1/reports.proto (Report, ReportRuleSummary), last_read: 2026-06-17
-  - /Users/evan/.agents/docs/sift/eval-2026-06-16-docs-channel/arm_b/skill.md (tool surface, list_* MCP tools), last_read: 2026-06-17
+  - path: protos/sift/assets/v1/assets.proto  # Asset, ListAssets
+    last_read: 2026-06-17
+  - path: protos/sift/runs/v2/runs.proto  # Run, ListRuns
+    last_read: 2026-06-17
+  - path: protos/sift/families/v1/families.proto  # Family, FamilyRun, ListFamilies
+    last_read: 2026-06-17
+  - path: protos/sift/channels/v3/channels.proto  # Channel, ListChannels
+    last_read: 2026-06-17
+  - path: protos/sift/ingestion_configs/v2/ingestion_configs.proto  # IngestionConfig, FlowConfig, ChannelConfig
+    last_read: 2026-06-17
+  - path: protos/sift/rules/v1/rules.proto  # Rule, RuleCondition, RuleAction, AnnotationActionConfiguration
+    last_read: 2026-06-17
+  - path: protos/sift/annotations/v1/annotations.proto  # Annotation, AnnotationType
+    last_read: 2026-06-17
+  - path: protos/sift/reports/v1/reports.proto  # Report, ReportRuleSummary
+    last_read: 2026-06-17
+  - path: /Users/evan/.agents/docs/sift/eval-2026-06-16-docs-channel/arm_b/skill.md  # tool surface, list_* MCP tools
+    last_read: 2026-06-17
 created: 2026-06-17
-updated: 2026-06-17
-last_accessed: 2026-06-17
+updated: 2026-07-06
+last_accessed: 2026-07-06
 ---
 
-The data model an agent must understand to answer questions about Sift and operate the product. An asset is the physical or logical system under observation; its telemetry arrives on channels, organized into time windows called runs. Rules evaluate channel conditions and produce annotations; reports aggregate rule results over a run. Definitions below are grounded in the public protos under `protos/sift/`; see [[project-overview]] for the system architecture, [[channel-data-service]] for how channel data is served, and [[data-pipeline]] for ingestion internals.
+The data model an agent must understand to answer questions about Sift and operate the product. An asset is the physical or logical system under observation; its telemetry arrives on channels, organized into time windows called runs. Rules evaluate channel conditions and produce annotations; reports aggregate rule results over a run. Definitions below are grounded in the public protos under `protos/sift/`; see [[project-overview]] for the system architecture. For how channel data is served in the frontend or for ingestion internals, query codegraph.
 
 ## Asset
 

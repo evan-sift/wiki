@@ -15,8 +15,8 @@ sources:
   - path: web-app/src/services/storage/
     last_read: 2026-04-16
 created: 2026-04-16
-updated: 2026-04-16
-last_accessed: 2026-05-07
+updated: 2026-07-06
+last_accessed: 2026-07-06
 ---
 
 Six services in the codebase follow the same structural pattern: a main-thread singleton
@@ -25,8 +25,9 @@ handles message routing, lifecycle, and bootstrap quirks. This page documents th
 shared pattern so new worker services can be built without re-deriving it, and so you
 know which details are invariants vs. per-service choices.
 
-Concrete instances: [[channel-data-service]], [[storage-service]], `channelListService`,
-`metricsDataService`, `tableDataService`, `annotationsListService`.
+Concrete instances: `channelDataService`, [[storage-service]], `channelListService`,
+`metricsDataService`, `tableDataService`, `annotationsListService` (all under
+`web-app/src/services/` — query codegraph for any one of them).
 
 ## When to Use a Worker
 
@@ -102,7 +103,7 @@ The codebase uses two distinct protocols. Pick based on the caller's needs.
 
 ### A. Subscription + Callback Map (Streaming)
 
-Used by: [[channel-data-service]], `channelListService`, `metricsDataService`,
+Used by: `channelDataService`, `channelListService`, `metricsDataService`,
 `tableDataService`.
 
 - Client registers a callback under a `subscriptionId`.
@@ -146,7 +147,7 @@ Right choice when the API is `async` and returns a single value per call.
 
 ### Escape Hatch: MessageChannel for One-Shots Inside a Subscription Service
 
-[[channel-data-service]] and `annotationsListService` use `MessageChannel` to add
+`channelDataService` and `annotationsListService` use `MessageChannel` to add
 Promise-returning one-shot calls (cache invalidation, tree fetch) without adding a
 global message type:
 
@@ -282,8 +283,8 @@ the code under test into a pure helper file.
 
 ## Related
 
-- [[channel-data-service]] — the richest instance (subscription + MessageChannel + cache).
 - [[storage-service]] — the request/response instance; source of the worker-auth pattern.
 - [[opfs-service]] — the worker-only primitive that motivates several services.
 - [[performance-patterns]] — why workers are worth the complexity.
-- [[data-pipeline]] — high-level flow that chains several worker services together.
+- `channelDataService` is the richest instance (subscription + MessageChannel + cache) —
+  query codegraph for its current structure.

@@ -11,8 +11,8 @@ sources:
   - path: web-app/src/store/explore2Slice/explore2Slice.syncer.ts
     last_read: 2026-04-13
 created: 2026-04-12
-updated: 2026-04-16
-last_accessed: 2026-05-07
+updated: 2026-07-06
+last_accessed: 2026-07-06
 ---
 
 Sift uses a layered state management approach: Redux Toolkit for global state, React
@@ -93,10 +93,17 @@ The syncer's `reduxMiddleware` updates the hash on state changes. On page load,
 
 Most future work should use the TabState/OPFS pattern instead of URL hash sync.
 
-The canonical example is [[explore2-slice]], which syncs ~18 fields (most as
-base64-encoded JSON) including panel settings, Dockview layout, selected data sources,
-sync/live modes, and compare/alignment settings. Actions accept an `ignoreCleanup: true`
-flag so URL-hydration dispatches skip the cleanup logic that runs for normal user actions.
+The canonical example is the Explore 2 slice (`web-app/src/store/explore2Slice/` —
+query codegraph for structure), which syncs ~18 fields (most as base64-encoded JSON).
+Two rules from that slice worth keeping:
+
+- Actions accept an `ignoreCleanup: true` flag, dispatched during URL hydration to skip
+  the derived-state cleanup logic that runs on normal user actions. Reducers that add
+  cleanup behavior must honor it, or hydration will mangle restored state.
+- `explore2Slice/sharelinkRegression/` holds regression tests for sharelink URL
+  compatibility. Sharelinks are persistent artifacts users share externally, so URL
+  decoding must stay backward-compatible across state-shape changes — extend those
+  tests whenever the synced state shape changes.
 
 ## Store Reset
 

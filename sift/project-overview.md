@@ -7,8 +7,8 @@ sources:
   - path: internal-docs/src/web-app/llms.md
     last_read: 2026-04-12
 created: 2026-04-12
-updated: 2026-06-17
-last_accessed: 2026-06-17
+updated: 2026-07-06
+last_accessed: 2026-07-06
 ---
 
 Sift is a hardware telemetry and observability platform used for mission-critical hardware
@@ -40,9 +40,11 @@ is a React SPA that prioritizes correctness, performance (60fps), and handling l
 
 - [[component-patterns]] — compound components for composable UI
 - [[state-management]] — Redux slices with TabState/OPFS persistence
-- [[data-pipeline]] — Arrow IPC from backend, processed in Web Workers, cached in OPFS
+- [[worker-service-pattern]] — Arrow IPC from backend, processed in Web Workers, cached in OPFS ([[opfs-service]] / [[storage-service]])
 - [[performance-patterns]] — E2Syncer escapes React lifecycle for 60fps
-- [[data-visualization]] — composable ECharts hooks pattern
+- [[data-visualization]] — SiftDateTime, ECharts merge strategy, chart gotchas
+- [[routing]] — TanStack Router, file-based routes, URL state, page titles
+- [[rich-text-editor-options]] — rich text editor tradeoffs and adapter boundaries
 
 ## Related Areas (beyond the frontend)
 
