@@ -1,0 +1,136 @@
+#!/usr/bin/env bash
+#
+# check-stale — find wiki pages whose repo-path sources overlap with changed files.
+#
+# Usage:
+#   check-stale [--vault <vault>] [file ...]
+#   git diff --name-only | check-stale [--vault <vault>]
+#   check-stale [--vault <vault>]          # defaults to git diff --name-only HEAD~1
+#
+# Scans wiki page YAML frontmatter for `path:` references and matches them
+# against the provided changed file paths using prefix matching.
+
+set -euo pipefail
+
+# Default to the wiki root containing this script (bin/..), overridable via WIKI_DIR.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+WIKI_DIR="${WIKI_DIR:-$(dirname "$SCRIPT_DIR")}"
+VAULT="sift"
+
+# Parse flags
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --vault)
+      VAULT="$2"
+      shift 2
+      ;;
+    --help|-h)
+      echo "Usage: check-stale [--vault <vault>] [file ...]"
+      echo "       git diff --name-only | check-stale [--vault <vault>]"
+      echo ""
+      echo "Finds wiki pages whose repo-path sources overlap with changed files."
+      echo "If no files are given and stdin is a terminal, defaults to git diff --name-only HEAD~1."
+      exit 0
+      ;;
+    --)
+      shift
+      break
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
+VAULT_DIR="$WIKI_DIR/$VAULT"
+
+if [ ! -d "$VAULT_DIR" ]; then
+  echo "error: vault directory not found: $VAULT_DIR" >&2
+  exit 1
+fi
+
+# Collect changed files — from args, stdin, or git diff
+changed_files=()
+if [ $# -gt 0 ]; then
+  changed_files=("$@")
+elif [ ! -t 0 ]; then
+  while IFS= read -r line; do
+    [ -n "$line" ] && changed_files+=("$line")
+  done
+else
+  while IFS= read -r line; do
+    [ -n "$line" ] && changed_files+=("$line")
+  done < <(git diff --name-only HEAD~1 2>/dev/null || true)
+fi
+
+if [ ${#changed_files[@]} -eq 0 ]; then
+  echo "No changed files provided." >&2
+  exit 0
+fi
+
+# Collect path: references from wiki page frontmatter.
+# We only look at top-level .md files in the vault (not _meta/ or _sources/).
+found=0
+for page in "$VAULT_DIR"/*.md; do
+  [ -f "$page" ] || continue
+
+  # Extract path: values from YAML frontmatter (between --- delimiters)
+  in_frontmatter=false
+  in_sources=false
+  paths=()
+
+  while IFS= read -r line; do
+    if [[ "$line" == "---" ]]; then
+      if $in_frontmatter; then
+        break  # end of frontmatter
+      else
+        in_frontmatter=true
+        continue
+      fi
+    fi
+
+    $in_frontmatter || continue
+
+    # Detect sources: block
+    if [[ "$line" =~ ^sources: ]]; then
+      in_sources=true
+      continue
+    fi
+
+    # End of sources block (next top-level key)
+    if $in_sources && [[ "$line" =~ ^[a-z] ]]; then
+      in_sources=false
+      continue
+    fi
+
+    # Extract path: value within sources block
+    if $in_sources && [[ "$line" =~ ^[[:space:]]*-?[[:space:]]*path:[[:space:]]*(.*) ]]; then
+      ref="${BASH_REMATCH[1]}"
+      # Strip quotes and trailing comments
+      ref="${ref%%#*}"
+      ref="${ref#\"}"
+      ref="${ref%\"}"
+      ref="${ref#\'}"
+      ref="${ref%\'}"
+      ref="$(echo "$ref" | xargs)"  # trim whitespace
+      [ -n "$ref" ] && paths+=("$ref")
+    fi
+  done < "$page"
+
+  # Match changed files against extracted paths (prefix matching)
+  [ ${#paths[@]} -gt 0 ] || continue  # bash 3.2 + set -u errors on empty array expansion
+  page_name="$(basename "$page")"
+  for ref in "${paths[@]}"; do
+    for changed in "${changed_files[@]}"; do
+      # Prefix match: if the changed file starts with the reference path
+      if [[ "$changed" == "$ref"* ]] || [[ "$changed" == "$ref" ]]; then
+        echo "$page_name  ←  $ref  (changed: $changed)"
+        found=1
+      fi
+    done
+  done
+done
+
+if [ $found -eq 0 ]; then
+  echo "No wiki pages affected by the changed files."
+fi

@@ -1,0 +1,95 @@
+---
+title: Sift Domain Concepts
+tags: [domain-concepts, architecture]
+sources:
+  - protos/sift/assets/v1/assets.proto (Asset, ListAssets), last_read: 2026-06-17
+  - protos/sift/runs/v2/runs.proto (Run, ListRuns), last_read: 2026-06-17
+  - protos/sift/families/v1/families.proto (Family, FamilyRun, ListFamilies), last_read: 2026-06-17
+  - protos/sift/channels/v3/channels.proto (Channel, ListChannels), last_read: 2026-06-17
+  - protos/sift/ingestion_configs/v2/ingestion_configs.proto (IngestionConfig, FlowConfig, ChannelConfig), last_read: 2026-06-17
+  - protos/sift/rules/v1/rules.proto (Rule, RuleCondition, RuleAction, AnnotationActionConfiguration), last_read: 2026-06-17
+  - protos/sift/annotations/v1/annotations.proto (Annotation, AnnotationType), last_read: 2026-06-17
+  - protos/sift/reports/v1/reports.proto (Report, ReportRuleSummary), last_read: 2026-06-17
+  - /Users/evan/.agents/docs/sift/eval-2026-06-16-docs-channel/arm_b/skill.md (tool surface, list_* MCP tools), last_read: 2026-06-17
+created: 2026-06-17
+updated: 2026-06-17
+last_accessed: 2026-06-17
+---
+
+The data model an agent must understand to answer questions about Sift and operate the product. An asset is the physical or logical system under observation; its telemetry arrives on channels, organized into time windows called runs. Rules evaluate channel conditions and produce annotations; reports aggregate rule results over a run. Definitions below are grounded in the public protos under `protos/sift/`; see [[project-overview]] for the system architecture, [[channel-data-service]] for how channel data is served, and [[data-pipeline]] for ingestion internals.
+
+## Asset
+
+An asset is the system being monitored (a vehicle, engine, satellite, test stand, etc.). It is the top-level grouping for telemetry: channels belong to an asset, and runs reference one or more assets.
+
+Source: `protos/sift/assets/v1/assets.proto`, message `Asset` (lines 112-132). Key fields: `asset_id`, `name`, `organization_id`, `tags`, `metadata`, `is_archived`. Listed via the `ListAssets` RPC ("Retrieves assets using an optional filter") and the `list_assets` MCP tool.
+
+## Channel
+
+A channel is a single named time-series stream on an asset (one sensor or signal). It carries a typed sequence of timestamped values.
+
+Source: `protos/sift/channels/v3/channels.proto`, message `Channel` (lines 118-136). Key fields: `channel_id`, `name` (full channel name), `asset_id`, `description`, `unit_id`, `data_type` (`sift.common.type.v1.ChannelDataType`), `enum_types`, `bit_field_elements`, `active`. Listed via `ListChannels` ("Retrieve channels using an optional filter") and the `list_channels` MCP tool. The v2 message additionally carries `component` and `organization_id` fields that v3 drops; v3 is the current version.
+
+## Run
+
+A run is a bounded time window of data on one or more assets (for example, a single test, mission, or session). Data is queried and exported per run.
+
+Source: `protos/sift/runs/v2/runs.proto`, message `Run` (lines 182-207). Key fields: `run_id`, `name`, `description`, `start_time` and `stop_time` (both optional; `start_time` to current time for an ongoing run), `duration` (computed from stop minus start, or start to now if ongoing), `asset_ids` (a run can span multiple assets), `tags`, `metadata`, `is_adhoc`, `is_pinned`, `default_report_id`, `is_archived`. Listed via `ListRuns` ("Retrieve runs using an optional filter") and the `list_runs` MCP tool.
+
+## Family
+
+A family groups related runs for cross-run comparison and aggregate statistics (for example, every run of the same test procedure). Families are versioned: each family has a `current_version_id`, and a family version holds the set of member runs.
+
+Source: `protos/sift/families/v1/families.proto`, message `Family` (lines 303-342) and `FamilyRun` (lines 402-433). `FamilyRun` "represents a run which is either included in the family or explicitly excluded." Key `Family` fields: `family_id`, `client_key`, `current_version_id`, `is_archived`, `organization_id`. Listed via `ListFamilies` ("Retrieves families using an optional filter"). Families also define time alignments (`FamilyAlignment`) so member runs can be compared on a shared relative time base. Note: the proto carries `// TODO: remove this once this proto is ready for public release` (line 24), so the family API may not be generally available yet.
+
+## Run group
+
+Not a distinct entity in the Sift data model. No proto under `protos/` defines a `RunGroup` message, field, or service, and the eval ground-truth set does not reference it. The run-grouping primitive in the product is the Family (above). "Run group" appears only as an incidental phrase in a web-app UI comment, not as a modeled concept; treat it as informal language for a family or for a set of runs, not as a separate resource.
+
+## Ingestion config
+
+An ingestion config is the per-asset schema that declares what data Sift expects to receive. It is the contract a producer ingests against and is tied to a single asset.
+
+Source: `protos/sift/ingestion_configs/v2/ingestion_configs.proto`, message `IngestionConfig` (lines 95-99). Fields: `ingestion_config_id`, `asset_id`, `client_key` (a user-defined unique key for retrieval; creating two configs with the same `client_key` errors). An ingestion config contains flows, supplied at creation via `repeated FlowConfig flows` or added later via `CreateIngestionConfigFlows`. Listed via `ListIngestionConfigs` ("List ingestion configs using an optional filter").
+
+## Flow
+
+A flow is a named group of channels within an ingestion config that are ingested together as one record. Flows must have unique names within their ingestion config.
+
+Source: `protos/sift/ingestion_configs/v2/ingestion_configs.proto`, message `FlowConfig` (lines 101-112): `name` (required) and `repeated ChannelConfig channels`. Each `ChannelConfig` declares a channel by `name`, `unit`, `description`, and `data_type` (plus `enum_types` / `bit_field_elements`). Listed via `ListIngestionConfigFlows` ("List ingestion config flows using an optional filter"). The v1 `ChannelConfig` also carries a `component` field that v2 drops.
+
+## Rule
+
+A rule defines conditions over channel data and an action to take when those conditions hold. Rules are evaluated on live data (when `is_live_evaluation_enabled`) and during report generation.
+
+Source: `protos/sift/rules/v1/rules.proto`, message `Rule` (lines 322-367). Key fields: `rule_id`, `name`, `description`, `is_enabled`, `conditions` (`repeated RuleCondition`), `rule_version` / `current_version_id`, `asset_configuration`, `contextual_channels`, `is_live_evaluation_enabled`, `client_key`, `folder_ids`, `is_archived`. Conditions are expressed via `RuleConditionExpression`: the current form is a `CalculatedChannelConfig` carrying a CEL `expression` plus `channel_references` that bind channel names; an older deprecated `SingleChannelComparisonExpression` used a single channel, a `ConditionComparator` (e.g. `LESS_THAN`, `GREATER_THAN`, `EQUAL`), and a threshold. When a condition fires, the rule's `RuleAction` (action type `ANNOTATION`) runs an `AnnotationActionConfiguration` (lines 883-885) that creates an annotation with a specified `annotation_type` and `tag_ids`. Listed via `ListRules` ("Retrieves a list of rules") and the `list_rules` MCP tool.
+
+## Annotation
+
+An annotation marks a time interval on a run, optionally linked to channels and assigned to a user. Annotations are either authored manually or created automatically when a rule condition fires.
+
+Source: `protos/sift/annotations/v1/annotations.proto`, message `Annotation` (lines 153-193). Key fields: `annotation_id`, `name`, `description`, `start_time`, `end_time`, `run_id`, `annotation_type`, `state`, `tags`, `assigned_to_user_id`, `linked_channels`, `asset_ids`, `created_by_condition_id` and `created_by_rule_condition_version_id` (set when a rule produced it), `report_rule_version_id`, `pending` (set while a rule violation is ongoing and the `end_time` is not yet finalized). The `AnnotationType` enum (lines 202-206) is the type discriminator:
+
+- `ANNOTATION_TYPE_UNSPECIFIED = 0`
+- `ANNOTATION_TYPE_DATA_REVIEW = 1`
+- `ANNOTATION_TYPE_PHASE = 2`
+
+A data review annotation (`ANNOTATION_TYPE_DATA_REVIEW`) carries a review `state` and is the type rules emit when a condition is violated; a phase annotation (`ANNOTATION_TYPE_PHASE`) marks a named segment of a run and must have `state` unset. Listed via `ListAnnotations` ("Retrieves annotations using an optional filter").
+
+## Report
+
+A report is the result of evaluating a set of rules against one run. It aggregates per-rule outcomes and their annotation counts.
+
+Source: `protos/sift/reports/v1/reports.proto`, message `Report` (lines 139-158). Key fields: `report_id`, `run_id` (the run evaluated), `report_template_id`, `name`, `summaries` (`repeated ReportRuleSummary`, one line per rule, ordered by `display_order`), `tags`, `job_id`, `rerun_from_report_id`, `is_archived`. Each `ReportRuleSummary` records a `rule_id` / `rule_version_id`, a `ReportRuleStatus`, and annotation counts `num_open`, `num_failed`, `num_passed`. `RerunReport` "will create a new report with the same rule versions and run as the original report and run the evaluation again using the most up-to-date set of data." Listed via `ListReports` ("List reports") and the `list_reports` MCP tool.
+
+## Relationships
+
+- An **asset** owns **channels**; runs reference assets via `asset_ids` (a run can span multiple assets).
+- A **run** is a time window over an asset's channels; data is queried and exported per run.
+- A **family** groups related runs (via versioned `FamilyRun` membership) for cross-run comparison; it is the only run-grouping primitive. "Run group" is not a modeled entity.
+- An **ingestion config** belongs to one asset and contains **flows**; each flow contains **channel configs** that declare the channels ingested together. This is the producer-side schema that backs the channels read above.
+- A **rule** evaluates conditions over channel data (CEL expressions binding channel references, or legacy threshold comparisons) and, on a fire, runs an annotation action that creates an **annotation** of a given `annotation_type`. Rule-created annotations carry `created_by_condition_id` and `created_by_rule_condition_version_id`.
+- A **data review annotation** (`ANNOTATION_TYPE_DATA_REVIEW`) is the type rules emit; a **phase annotation** marks a named run segment.
+- A **report** evaluates a set of rules against one **run** and aggregates each rule's status and annotation counts (`num_open` / `num_failed` / `num_passed`) into `ReportRuleSummary` lines.
+
+For agents, discovery of each resource is exposed as MCP tools: `list_assets`, `list_channels`, `list_runs`, `list_rules`, `list_reports` (per `eval-2026-06-16-docs-channel/arm_b/skill.md`). There is no `list_families`, `list_annotations`, or `list_ingestion_configs` MCP tool; reach those via the REST API or `sift_client`.
