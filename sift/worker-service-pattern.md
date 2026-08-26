@@ -13,21 +13,31 @@ sources:
   - path: web-app/src/services/annotations/
     last_read: 2026-04-16
   - path: web-app/src/services/storage/
-    last_read: 2026-04-16
+    last_read: 2026-08-25
+  - path: web-app/src/services/connectRpc/
+    last_read: 2026-08-25
+  - path: web-app/src/services/conversation/
+    last_read: 2026-08-25
+  - path: web-app/src/services/workerRpc.util.ts
+    last_read: 2026-08-25
 created: 2026-04-16
-updated: 2026-07-06
-last_accessed: 2026-07-06
+updated: 2026-08-26
+last_accessed: 2026-08-26
 ---
 
-Six services in the codebase follow the same structural pattern: a main-thread singleton
-class owns a dedicated `Worker`, clients interact through the singleton, and the class
+Eight services in the codebase follow the same structural pattern: a main-thread
+singleton class owns a `Worker`, clients interact through the singleton, and the class
 handles message routing, lifecycle, and bootstrap quirks. This page documents the
 shared pattern so new worker services can be built without re-deriving it, and so you
 know which details are invariants vs. per-service choices.
 
 Concrete instances: `channelDataService`, [[storage-service]], `channelListService`,
-`metricsDataService`, `tableDataService`, `annotationsListService` (all under
-`web-app/src/services/` — query codegraph for any one of them).
+`metricsDataService`, `tableDataService`, `annotationsListService`, `connectRpcService`,
+`conversationService` (all under `web-app/src/services/` — query codegraph for any one
+of them). Two do not own a dedicated worker: `conversationService` layers on the
+connectRpc worker (`readonly #worker: Worker = connectRpcWorker`), and
+`connectRpcService` keeps the `new Worker(...)` call in a separate main-thread shim,
+`connectRpcService.workerHandle.ts`.
 
 ## When to Use a Worker
 
@@ -41,8 +51,10 @@ overhead and dual-bundle cost outweigh any benefit.
 
 ## The Vite Worker Bootstrap Idiom
 
-Every service instantiates its worker with the same call, which Vite recognizes and
-bundles as a separate chunk:
+Services instantiate their worker with the same call, which Vite recognizes and
+bundles as a separate chunk (deviations: connectRpc holds this call in its
+`workerHandle` shim, and `channelListService` accepts an injected worker —
+`worker ?? new Worker(...)` — for tests):
 
 ```ts
 this.worker = new Worker(
@@ -160,17 +172,22 @@ worker.postMessage(data, [channel.port2]);
 The worker handler replies via `event.ports[0].postMessage(response)`. Each call is
 fully isolated — no id management on the main thread.
 
-`annotationsListService` wraps this in two generic helpers:
+Two generic helpers wrap this, in the shared module
+`web-app/src/services/workerRpc.util.ts` (imported by annotations, connectRpc, and
+conversation):
 
 ```ts
 sendOneShot<TReq, TRes>(worker, data, signal?, timeoutMs?): Promise<TRes>
-streamFromWorker<TReq, TRes>(worker, data, onMessage, signal?): Promise<void>
+streamFromWorker<TReq, TRes extends object>(worker, data, onMessage, signal?): Promise<void>
 ```
 
 `sendOneShot` supports `AbortSignal` and a default 10s timeout. `streamFromWorker`
 reuses the same channel but keeps the port open until a response includes
-`isComplete: true`. Reusable in any worker service that wants one-shot-over-a-stream
-ergonomics.
+`isComplete: true`. It also has a subscriber-driven cancel protocol:
+`WORKER_RPC_CANCEL_MESSAGE` / `WORKER_RPC_CANCEL_ACK_MESSAGE`, with a 500ms fallback
+if the ack never arrives. Per the module's own docs, any worker that serves a stream
+**must** install a `port.onmessage` cancel handler — omitting it leaks the stream on
+the worker side after the consumer aborts.
 
 ## Init Handshake
 
@@ -267,19 +284,22 @@ Some modules must never enter the main-thread bundle:
   ONLY! Do not import this file in the main thread, as it will cause all kinds of
   issues, build and otherwise."*
 - `*.worker.ts` files themselves — imported by Vite via `new URL(..., import.meta.url)`,
-  never by a regular `import` on the main thread.
+  never by a regular `import` on the main thread. This is convention only; no lint rule
+  enforces it. `connectRpcService.workerHandle.ts` exists precisely to uphold it: its
+  docstring explains that merging the handle into the `.worker.ts` would pull the
+  transport/proto graph into the main bundle.
 
 If you need worker-only functionality from main-thread code, talk to a worker service
 (usually [[storage-service]]) instead of reaching through.
 
 ## Per-Service Test Quirks
 
-`channelDataService.worker.expression.utils.ts` exists as a sibling file specifically
-because the worker's full import chain breaks vitest (imports `self.postMessage` calls
-at module eval). Pure helpers get pulled out into their own file so tests can import
-them without dragging in the worker module. Watch for this when adding tests for
-worker-side logic — if a test fails trying to evaluate the worker entry point, split
-the code under test into a pure helper file.
+Pure helpers get pulled out of worker entry points into sibling `*.utils.ts` files
+(e.g. `channelDataService.worker.expression.utils.ts`) so other modules and tests can
+import them without dragging in the worker module — the worker's full import chain
+breaks vitest (it evaluates `self.postMessage` calls at module load). Watch for this
+when adding tests for worker-side logic: if a test fails trying to evaluate the worker
+entry point, split the code under test into a pure helper file.
 
 ## Related
 

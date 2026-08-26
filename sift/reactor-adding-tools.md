@@ -3,38 +3,46 @@ title: Adding Sift Agents Tools
 tags: [chat, backend, frontend, tooling, architecture]
 sources:
   - path: services/chat/tools/list_rules.go
-    last_read: 2026-05-05
+    last_read: 2026-08-25
   - path: services/chat/tools/list_calculated_channels.go
-    last_read: 2026-05-06
+    last_read: 2026-08-25
   - path: services/chat/tools/metadata_querier.go
-    last_read: 2026-05-20
+    last_read: 2026-08-25
   - path: services/chat/tools/tool.go
-    last_read: 2026-05-20
+    last_read: 2026-08-25
+  - path: services/chat/tools/schemas/
+    last_read: 2026-08-25
+  - path: services/chat/tools/subguides/
+    last_read: 2026-08-25
   - path: services/chat/tools/write/
-    last_read: 2026-05-21
+    last_read: 2026-08-25
   - path: services/chat/tools/write/selectors.go
-    last_read: 2026-05-21
+    last_read: 2026-08-25
   - path: services/chat/tools/resources.go
-    last_read: 2026-05-06
+    last_read: 2026-08-25
+  - path: services/chat/access/access.go
+    last_read: 2026-08-25
   - path: services/chat/context/profile.go
-    last_read: 2026-05-20
+    last_read: 2026-08-25
   - path: services/chat/v1/tool_proto_converter.go
-    last_read: 2026-05-06
+    last_read: 2026-08-25
   - path: services/chat/v1/tool_approval.go
-    last_read: 2026-05-21
+    last_read: 2026-08-25
   - path: web-service/main.go
-    last_read: 2026-05-20
+    last_read: 2026-08-25
   - path: web-app/src/componentsV2/complex/agent/rightPanel/collectResources.ts
-    last_read: 2026-05-05
+    last_read: 2026-08-25
   - path: web-app/src/componentsV2/complex/agent/tool/agentResourceChips.tsx
-    last_read: 2026-05-05
+    last_read: 2026-08-25
   - path: web-app/src/componentsV2/complex/agent/rightPanel/agentResourcesPanel.tsx
-    last_read: 2026-05-05
+    last_read: 2026-08-25
+  - path: web-app/src/componentsV2/complex/agent/rightPanel/useAgentResourceLookups.ts
+    last_read: 2026-08-25
   - path: protos/sift_internal/chat/v1/chat.proto
-    last_read: 2026-05-21
+    last_read: 2026-08-25
 created: 2026-05-05
-updated: 2026-05-21
-last_accessed: 2026-05-21
+updated: 2026-08-26
+last_accessed: 2026-08-26
 ---
 
 Checklist for adding a new Sift Agents tool end to end, including typed proto
@@ -48,12 +56,18 @@ chat event rather than a tool/resource surface.
 
 - Add `*Input` and `*Output` messages near the other `*Input`/`*Output` types.
 - Add the new `*Ref` message near `ChannelRef` / `RuleRef`.
-- Add the input to `ToolInput.input` oneof. Existing field numbers are
-  assets=1, runs=2, channels=3, query_time_series=4, calculated_channels=5,
-  rules=6; continue from 7.
-- Add the output to `ToolOutput.output` oneof using the same numbering.
-- Add the ref variant to `ResourceRef.ref` oneof. Existing field numbers are
-  assets=1, runs=2, channels=3, calculated_channel=4, rule=5; continue from 6.
+- Add the input to `ToolInput.input` oneof and the output to
+  `ToolOutput.output` oneof. **Do not assume symmetric numbering or guess the
+  next tag** — the two oneofs have diverged, and `ToolInput` carries a
+  `reserved 7` from a removed field. Read each oneof and take its next unused,
+  non-reserved tag (as of 2026-08: input next free is 9, output next free is
+  11).
+- Add the ref variant to `ResourceRef.ref` oneof; same rule, take the next
+  free tag (report=6 as of 2026-08).
+- Tools without typed I/O fall through to `raw_json` in
+  `tool_proto_converter.go` (`request_user_input`, `search_sift_docs`, and
+  `read_sift_doc` do this today), so typed messages are the convention, not a
+  hard requirement.
 - Run `make generated-local` after changes.
 
 ### 2. `services/chat/tools/metadata_querier.go`
@@ -63,22 +77,32 @@ chat event rather than a tool/resource surface.
 - The interface should be satisfied by the existing service implementation.
 - Write tools use the same narrow-interface pattern, but include both read and
   mutation methods plus non-mutating validation methods. For calculated
-  channels this is `CalculatedChannelWriter`, which embeds
-  `CalculatedChannelReader` and adds validate/create/update methods.
+  channels this is `CalculatedChannelReadWriter`; for rules it is
+  `RuleReadWriter`, which embeds `RuleLister`.
 
 ### 3. `services/chat/tools/resources.go`
 
 - Add a builder function such as `RuleRef(ruleID string) *ichatv1pb.ResourceRef`.
 - Add the matching `case *ichatv1pb.ResourceRef_Rule:` to `refKey()` so
   deduplication works.
+- **Security-critical:** add the variant to `BucketRefs()` in the same file,
+  and wire the bucket into `CheckResourceRefs` in
+  `services/chat/access/access.go`. Access checks are gated on those buckets;
+  a new ref variant that isn't bucketed silently bypasses the access check.
 
 ### 4. `services/chat/tools/list_*.go`
 
 - Implement the `Tool` interface: `Name()`, `Description()`, `Guide()`,
   `InputSchema()`, and `Execute()`.
+- `Guide()` returns `GuideContent{SubGuides, Body}`; shared guide sections
+  live in `services/chat/tools/subguides` and the registry dedupes them across
+  tools.
+- `InputSchema()` returns a schema from the `services/chat/tools/schemas`
+  package (e.g. `schemas.ListRules()`), not one authored inline on the tool.
 - `Execute` returns `*Result{Data, Resources}`. `Resources` should be
   `dedupRefs(refs)`.
 - Use a trimmed output struct, not the full proto, and serialize it with
+  `marshalToolJSON` (the HTML-escaping-disabled encoder in `tool.go`), not
   `json.Marshal`.
 - Do not expose tenant IDs, user IDs, user notes, metadata, or other service
   fields that are not needed by the Sift Agents model.
@@ -108,17 +132,22 @@ chat event rather than a tool/resource surface.
   only after an approved `ToolApprovalResponse`.
 - `Stage` should validate the exact mutation payload using the authoritative
   service validation path without mutating data, then return a `PendingAction`
-  with a concise summary, preview map, optional warnings, validated payload,
-  and rationale.
+  with a concise summary, a typed preview proto, optional warnings, validated
+  payload, and rationale.
 - The chat approval layer persists staged write payloads on the
   `MESSAGE_ROLE_TOOL_APPROVAL_REQUEST` row's server-only
   `ChatMessageInternalMetadata.tool_approval_actions`; there is no separate
   pending-action table. Resume validates the latest message is still the
   matching approval request before committing any approved actions.
-- Preview values may use normal Go typed slices, structs, or generated proto
-  structs, but they must JSON-marshal into the compact shape the frontend should
-  render. The chat approval layer normalizes this JSON shape before creating the
-  streamed `google.protobuf.Struct`.
+- Previews are typed protos, not JSON maps. `PendingAction.Preview` is a
+  `WritebackPreview` (aliased to `proto.Message`), and `chat.proto` declares a
+  `oneof preview` with one message per write tool
+  (`RuleWritebackPreview`, `CalculatedChannelWritebackPreview`,
+  `EvaluateRuleWritebackPreview`); there is deliberately no generic JSON
+  preview. A new write tool therefore needs three extra edits: a preview proto
+  message, a variant in the `oneof preview`, and a case in the type-switch in
+  `services/chat/v1/tool_approval.go` (which logs "unknown writeback preview
+  type" for anything unhandled).
 - Mutable write tools must guard commits with the entity version captured at
   stage time. Re-read the latest entity immediately before mutation and reject
   the writeback if the current rule or calculated-channel version differs from
@@ -128,9 +157,10 @@ chat event rather than a tool/resource surface.
   not `BatchGetRules` or `GetCalculatedChannel`.
 - `Commit` should deserialize only the staged validated payload, stamp the
   `conversationID` and `actionID` parameters onto the entity (audit prefix on
-  `user_notes`, `client_key` for replay protection), execute the service
-  mutation, and return a `CommitResult` with a resource ID, summary, and
-  resource refs.
+  `version_notes` for rules, `user_notes` for calculated channels;
+  `client_key` for replay protection), execute the service mutation, and
+  return a `CommitResult` with a resource ID, summary, resource refs, and an
+  optional `JobID` for background-job commits.
 - Calculated-channel write tools are registered as
   `create_calculated_channel`, `update_calculated_channel`, and
   `archive_calculated_channel`; archive uses `UpdateCalculatedChannel` with
@@ -145,12 +175,13 @@ chat event rather than a tool/resource surface.
 Use `//go:build unit`.
 
 - Mock the service interface.
-- Test both list and batch paths.
-- Test that the archive filter is applied on list and not applied on batch.
+- Test that CEL filters (archive filter, ID lookups) pass through to the
+  service as built. There is no batch path — lookups are CEL filters on the
+  list path per section 4.
 - Test that resource refs are emitted per returned record.
 - Test service error branches for every backend call path.
 - Test over-cap rejection for every model-controlled selector dimension, not
-  just the selector that drives the obvious backend `List` or `BatchGet` call.
+  just the selector that drives the obvious backend `List` call.
 
 ### 6. `services/chat/v1/tool_proto_converter.go`
 
@@ -167,9 +198,9 @@ enough because profile filtering controls what Sift Agents can see and invoke.
 
 - Add the new service interface to the `newChatService` signature.
 - Pass the concrete service implementation at the call site.
-- Register `chattools.NewList*Tool(service)` in `chattools.NewRegistry(...)`.
-- Add a focused regression test for the production registry helper so profile
-  availability and executable tool registration cannot drift.
+- Register `chattools.NewList*Tool(service)` in the
+  `newProductionChatToolRegistry` helper, which builds the
+  `chattools.NewRegistry(...)` used by `newChatService`.
 
 ## Frontend (TypeScript)
 
@@ -192,13 +223,15 @@ files.
   `grpcApi.useCalculatedChannelServiceGetCalculatedChannelQuery` for per-chip
   fetches.
 
-### `rightPanel/agentResourcesPanel.tsx`
+### `rightPanel/useAgentResourceLookups.ts` and `agentResourcesPanel.tsx`
 
-- Add the new ID key memos, `useLazy*Query` hook, fetch callback, and
-  `useBatchedFetch` call.
-- Add the new resource to `ResourceLookups` and `LoadingFlags` types.
-- Add a new `SectionDescriptor` in `buildSections()` with icon, label, count,
-  and `renderList`.
+- The lookup plumbing lives in `useAgentResourceLookups.ts`: add the new ID
+  key memos, `useLazy*Query` hook, fetch callback, and `useBatchedFetch` call
+  there, and extend the exported `ResourceLookups` and `ResourceLoadingFlags`
+  types.
+- In `agentResourcesPanel.tsx` (which consumes the hook), add a new
+  `SectionDescriptor` in `buildSections()` with icon, label, count, and
+  `renderList`.
 
 ### `collectResources.test.ts`
 

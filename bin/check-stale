@@ -6,9 +6,15 @@
 #   check-stale [--vault <vault>] [file ...]
 #   git diff --name-only | check-stale [--vault <vault>]
 #   check-stale [--vault <vault>]          # defaults to git diff --name-only HEAD~1
+#   check-stale [--vault <vault>] --drift  # commits per page source since page updated
 #
 # Scans wiki page YAML frontmatter for `path:` references and matches them
 # against the provided changed file paths using prefix matching.
+#
+# --drift ignores changed-file input. For every page it counts repo commits
+# touching each source path since the page's `updated` date. This catches
+# drift from OTHER PEOPLE'S commits, which the changed-files mode never sees.
+# Run it from inside the repo the source paths refer to.
 
 set -euo pipefail
 
@@ -16,6 +22,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 WIKI_DIR="${WIKI_DIR:-$(dirname "$SCRIPT_DIR")}"
 VAULT="sift"
+DRIFT=""
 
 # Parse flags
 while [[ $# -gt 0 ]]; do
@@ -24,12 +31,19 @@ while [[ $# -gt 0 ]]; do
       VAULT="$2"
       shift 2
       ;;
+    --drift)
+      DRIFT=1
+      shift
+      ;;
     --help|-h)
       echo "Usage: check-stale [--vault <vault>] [file ...]"
       echo "       git diff --name-only | check-stale [--vault <vault>]"
+      echo "       check-stale [--vault <vault>] --drift"
       echo ""
       echo "Finds wiki pages whose repo-path sources overlap with changed files."
       echo "If no files are given and stdin is a terminal, defaults to git diff --name-only HEAD~1."
+      echo "--drift instead counts repo commits per page source since the page's updated date;"
+      echo "run it from inside the repo the source paths refer to."
       exit 0
       ;;
     --)
@@ -47,6 +61,73 @@ VAULT_DIR="$WIKI_DIR/$VAULT"
 if [ ! -d "$VAULT_DIR" ]; then
   echo "error: vault directory not found: $VAULT_DIR" >&2
   exit 1
+fi
+
+# --drift mode: count commits touching each page's sources since its updated date.
+if [ -n "$DRIFT" ]; then
+  found_drift=0
+  for page in "$VAULT_DIR"/*.md; do
+    [ -f "$page" ] || continue
+
+    in_frontmatter=false
+    in_sources=false
+    updated=""
+    paths=()
+
+    while IFS= read -r line; do
+      if [[ "$line" == "---" ]]; then
+        if $in_frontmatter; then break; else in_frontmatter=true; continue; fi
+      fi
+      $in_frontmatter || continue
+      if [[ "$line" =~ ^updated:[[:space:]]*(.*) ]]; then
+        updated="$(echo "${BASH_REMATCH[1]}" | xargs)"
+        continue
+      fi
+      if [[ "$line" =~ ^sources: ]]; then
+        in_sources=true
+        continue
+      fi
+      if $in_sources && [[ "$line" =~ ^[a-z] ]]; then
+        in_sources=false
+        continue
+      fi
+      if $in_sources && [[ "$line" =~ ^[[:space:]]*-?[[:space:]]*path:[[:space:]]*(.*) ]]; then
+        ref="${BASH_REMATCH[1]}"
+        ref="${ref%%#*}"
+        ref="${ref#\"}"; ref="${ref%\"}"; ref="${ref#\'}"; ref="${ref%\'}"
+        ref="$(echo "$ref" | xargs)"
+        [ -n "$ref" ] && paths+=("$ref")
+      fi
+    done < "$page"
+
+    [ -n "$updated" ] || continue
+    [ ${#paths[@]} -gt 0 ] || continue
+
+    total=0
+    detail=""
+    for ref in "${paths[@]}"; do
+      case "$ref" in /*) continue ;; esac  # absolute paths are not repo refs
+      if [ ! -e "$ref" ]; then
+        detail="${detail}    gone  $ref"$'\n'
+        continue
+      fi
+      n="$(git log --oneline --since="$updated" -- "$ref" 2>/dev/null | wc -l | xargs)"
+      if [ "${n:-0}" -gt 0 ]; then
+        total=$((total + n))
+        detail="${detail}    $n  $ref"$'\n'
+      fi
+    done
+
+    if [ "$total" -gt 0 ] || [ -n "$detail" ]; then
+      found_drift=1
+      printf '%4d  %s  (updated %s)\n' "$total" "$(basename "$page")" "$updated"
+      printf '%s' "$detail"
+    fi
+  done
+  if [ "$found_drift" -eq 0 ]; then
+    echo "No drift: no page sources have repo commits since their updated dates."
+  fi
+  exit 0
 fi
 
 # Collect changed files — from args, stdin, or git diff

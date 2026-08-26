@@ -3,12 +3,12 @@ title: Development Commands
 tags: [tooling]
 sources:
   - path: web-app/package.json
-    last_read: 2026-04-12
-  - path: Makefile
-    last_read: 2026-04-12
+    last_read: 2026-08-25
+  - path: makefile
+    last_read: 2026-08-25
 created: 2026-04-12
-updated: 2026-04-24
-last_accessed: 2026-05-07
+updated: 2026-08-26
+last_accessed: 2026-08-26
 ---
 
 Common development commands and workflows for the azimuth project.
@@ -24,7 +24,7 @@ Common development commands and workflows for the azimuth project.
 | Command | Purpose |
 |---------|---------|
 | `cd web-app && npx vitest run <path>` | Run specific tests |
-| `cd web-app && npm run ci` | Full CI check (types + lint + tests) |
+| `cd web-app && npm run ci` | Full CI check (format check + lint + types + tests under coverage) |
 
 For Go integration tests (real Postgres + S3 backend, `//go:build integration`),
 see [[integration-tests]] — they require switching Docker stacks and passing
@@ -35,7 +35,7 @@ connection env vars.
 | Command | Purpose |
 |---------|---------|
 | `cd web-app && npm run lint` | Lint the frontend |
-| `cd web-app && npm run format` | Format with Prettier |
+| `cd web-app && npm run format` | Format with Biome (`biome format --write ./src`; there is no Prettier config) |
 
 ## Code Generation
 

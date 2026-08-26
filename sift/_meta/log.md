@@ -587,3 +587,40 @@ Prometheus labels, and Amplitude event types unbounded. Evan switched the
 design to a closed allowlist: `User called MCP tool <tool>` for the 35 tools
 in the sift MCP catalog, mirrored into `mcpToolNames` in the handler.
 Updated the [[feature-flags-and-analytics]] section accordingly.
+
+## 2026-08-25/26 — Full wiki audit + staleness cleanup
+
+Audited whether the wiki is still worth keeping (Evan asked; answer: yes).
+Method: per-page drift measured as azimuth commits touching frontmatter
+sources since each page's `updated` date, then four subagents verified the
+six highest-drift pages claim-by-claim against main.
+
+Results: [[skills]] fully accurate despite 28 commits of source drift.
+[[dev-commands]], [[worker-service-pattern]], [[integration-tests]], and
+[[sift-domain-concepts]] mostly accurate with specific stale or wrong claims,
+now fixed. [[reactor-adding-tools]] was the hazard (96 commits of drift):
+proto tag 7 is reserved (next free input 9 / output 11, numbering diverged),
+write previews are a typed proto oneof plus a tool_approval.go case (not a
+JSON map), and new ResourceRef variants must be wired into BucketRefs and
+access.go CheckResourceRefs or they silently bypass the access check. All
+corrected, plus the renames: CalculatedChannelReadWriter / RuleReadWriter,
+marshalToolJSON, GuideContent + subguides, the schemas package,
+newProductionChatToolRegistry, and the frontend move to
+useAgentResourceLookups.ts (LoadingFlags → ResourceLoadingFlags).
+
+Dropped all proto line-number citations from [[sift-domain-concepts]] — the
+fastest-rotting detail; four of eight ranges were already stale. Family
+unstable marker removed (public since 2026-07, e3938ba606); reports now carry
+ReportType (RULE_EVALUATION | CANVAS, canvas merge ce36ead611); the MCP
+catalog grew list_annotations, list_rule_versions,
+list_report_rule_summaries, list_report_templates, list_users.
+
+Structural finding: check-stale's changed-files mode only sees my own diffs,
+and every damaging error came from teammates' commits. Added
+`check-stale --drift`: counts commits per page source since the page's
+updated date; run from the azimuth checkout. First run flags
+chat-service-goroutine-safety (12) and chat-event-types (7) as next to
+re-verify.
+
+Housekeeping: wiki now has a remote (github.com/evan-sift/wiki); previously
+uncommitted work is committed and pushed.
