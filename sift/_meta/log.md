@@ -410,3 +410,180 @@ Pages created:
 
 Linked from [[sift-mcp-and-cli]]; indexed under backend/chat/tooling. Also fixed a
 SIGPIPE bug in `wiki-ingest-digest.sh` (`jq | head` under `set -o pipefail`).
+
+## 2026-07-14 — SCV pare-down (ENG-12894)
+
+Rewrote [[scv]] for the review-only world: implementation mode, Slack/Linear
+agent SDK, Firestore, Pub/Sub, Cloud Scheduler, Tailscale, the two-tier bake,
+and canary/stable channels are all deleted on branch
+eng-12894-pare-down-scv-to-only-pr-reviews. New content: instance-name mutex,
+maxRunDuration backstop, scv-agent sandbox, boot-ack-as-success-signal,
+three-dot diff fix, no thread auto-resolution. Old "docker compose stop" and
+TTL/trust-code-over-RFC sections removed (machinery no longer exists).
+
+## 2026-07-24 — SCV adversarial review (ENG-13153)
+
+Updated [[scv]] for the attack→judge pipeline on branch
+eng-13153-adversarial-review-as-the-default. Recorded the measured motivation
+(25 runs, zero criticals, 8 "No new findings", PR 12805 clean at 29 files), the
+five-stage wrapper, `slice.ts` partitioning, the code-side coverage gate, the
+judge-only thread access, the two output tiers, and `out/coverage.json` as the
+honesty mechanism. Corrected the now-historical claims: RFC-0204 ch. 04's
+`code-review` skill is deleted and ch. 01/05's "pi runs once" no longer holds.
+New gotchas: `vertex-proxy` must stay `ThreadingHTTPServer` with a cached
+token, recon-agent `tools:` allowlists are the only bound on subagent
+recursion, and per-pass transcripts live in `out/logs/`.
+
+## 2026-07-27 — SCV self-review fixes (ENG-13153)
+
+Updated [[scv]] after implementing SCV's own review of PR 13043. New durable
+facts: `run_pass` must save/restore errexit (a bare `set -e` before
+`return "$rc"` fires at the caller and killed every rc-inspecting salvage
+path); `SCV_PR_REVIEW_TIMEOUT` is now a hard wall clock because the serial
+coverage re-prompt sits outside the 55/35/10 split and could outrun
+`maxRunDuration`; the cross-cut pass gets a manifest-derived
+`inputs/crosscut.files` contract so gate and prompt spell paths identically;
+`planSlices` filters empty buckets (zero-diff-line files never move the
+bin-packer's pointer); and the vertex-proxy token cache invalidates on 401/403
+plus a 30s `gcloud` fetch timeout under the lock. Also corrected the stale
+"builder matches the runtime shape" claim — the Packer builder is
+`e2-standard-4` on purpose; only `disk_size` tracks `gce.ts`.
+
+## 2026-07-27 — SCV adversarial review, round 2 (ENG-13153)
+
+Second multi-agent review pass over the branch. New durable facts in [[scv]]:
+`run_pass`'s `usage-<name>.jsonl` redirect is the last element of a pipeline, so
+a planted file makes it fail, SIGPIPE the producer, and return rc=141 — not 124 —
+which skips the judge's salvage path and loses the whole review to one zero-byte
+file. `startup.sh` now deletes `/scv/azimuth/.pi`: pi's subagent extension takes
+`agentScope` as a model-chosen parameter, its project-agent confirmation is gated
+on `ctx.hasUI` (always false under `--print`), and project definitions overwrite
+baked ones by name, so a PR could replace a recon agent's `tools:` allowlist —
+verified against pinned pi 0.81.1. Prior review threads are now staged in section
+8 rather than up front, making the attacker/judge split structural instead of
+prompt-level. Failed-gate passes keep their candidates (labelled) instead of
+having them silently discarded. `coverage.json` gained `candidatesRaised` so
+over-filtering by the judge is detectable at all.
+
+## 2026-07-27 — SCV adversarial review, round 3 (ENG-13153)
+
+Third pass. Three of round 2's own fixes were wrong or incomplete, which is the
+case for the re-review-after-applying rule: `jq -s` on a missing file prints 0
+*and* exits 2, so `|| echo 0` produced a two-line value that killed the
+candidate-count loop mid-way; the unslurped concerns filter emitted nothing for a
+whitespace-only file and two documents for trailing garbage, leaving concerns.json
+unparseable (the exact outcome it was written to avoid); and `rm -f` does not
+remove a planted *directory*, so the usage-path unlink didn't close the rc=141
+hole. New durable facts in [[scv]]: pi's `<agentDir>/SYSTEM.md` REPLACES the
+built-in system prompt and agentDir is the shared-uid home, so run_pass scrubs it
+per pass; the subagent extension's children need `--no-context-files` or they load
+the PR's AGENTS.md as `<project_instructions>` (patched at bake time, fail-loud);
+`out/` must be ubuntu-owned 1775 with a pre-created `out/logs`, because `tee` is
+the one write that cannot unlink first; and the usage glob must skip symlinks or
+it copies the gh/Linear tokens into an agent-readable file.
+
+## 2026-07-27 — SCV adversarial review, round 4 (ENG-13153)
+
+Fourth pass. Three of round 3's four fixes were still incomplete, all of the same
+shape: they guarded a *trigger* rather than validating a *value* or an
+*ownership* assumption. `rm -rf` as ubuntu cannot clear an agent-owned non-empty
+directory (needs write inside it), so the rc=141 hole stayed open — now
+`clear_out_path()` has the agent remove it first. `[ -s ]` is true for a
+directory and jq prints before failing, so the two-line `cand_n` bug survived —
+now the captured value is validated as an integer. Same for the concerns filter's
+multi-line capture. Fresh-eyes found the sharpest bug of all four rounds: a
+planted `out/empty-diff` makes the driver post nothing at all, so one `touch`
+silences a review that found defects. Also recorded: pi never activates
+grep/find/ls (default active set is read/bash/edit/write), so the prompts were
+reworded off a tool that was never offered; adding `--tools` is deferred because
+it also filters extension tools and would need a live run to prove the recon
+subagents survive.
+
+## 2026-07-27 — SCV adversarial review, round 5 / cap (ENG-13153)
+
+Fifth and final round. Same class a fourth time: round 4's `clear_out_path`
+validated the planted path's *shape* (directory? symlink?) but not the outcome, so
+a non-empty directory left mode 500 survived — rm never restores permissions it
+lacks, so even the owning agent's `rm -rf` fails. And three `rm -f` clears of
+agent-plantable paths (coverage.json, the judge's three outputs, the concerns
+rewrite) were never converted, each of which aborts the wrapper under errexit on a
+planted directory. Both fixed: chmod-then-rm, then assert the path is gone and
+`exit 8` if not. Generalised rule now in [[scv]]: assert the outcome, do not
+enumerate the ways an attacker can shape the input.
+
+## 2026-07-28 — SCV self-review follow-ups (ENG-13153)
+
+SCV's own re-review of the branch returned 1 finding + 5 concerns; CodeQL flagged
+a partial SSRF that was already remediated in-tree via MODEL_MAP. Implemented: the
+stale-`pr.review-threads.md` cleanup (a reused SCV_REVIEW_DIR broke the
+staging-order boundary the wrapper asserts), 401-only token invalidation (403 is
+authorization — a fresh token cannot help and dropping the cache stampedes
+gcloud), a real `vertex-proxy/test_proxy.py` plus a `make test` target, and README
+notes. Rejected two concerns with evidence from the pinned packages: pi already
+retries rate limits with backoff, and `--thinking xhigh` clamps *upward* to `max`
+on sonnet rather than being dropped. Both recorded in [[scv]] so they are not
+re-raised.
+
+## 2026-07-28 — SCV simplify pass (ENG-13153)
+
+Four cleanup agents (reuse / simplification / efficiency / altitude) over the
+branch. Removed 187 lines net. Biggest win: the three role prompts each repeated
+the output schema, the six lenses, the recon-subagent section, the truncation
+guidance and the doc-by-path table — now split into review-common.md (all passes)
+and review-attacker.md (both attackers), wired through a prompts_for_pass that
+emits one path per line into repeated --append-system-prompt flags (verified
+repeatable in pi's arg parser). The judge deliberately does NOT get
+review-attacker.md: it runs without -e "$subagent_ext", so describing a subagent
+tool to it would invent a capability.
+
+The pass also found a real bug that has nothing to do with LOC: the streaming
+proxy used resp.read(4096), which blocks until 4 KB accumulates. Measured on a
+200 B/100 ms stream: first relay at 2.08s with read, 0.00s with read1 — so on a
+slow generation the proxy withheld output for exactly as long as the idle timeout
+streaming exists to prevent. Now read1, pinned by a test whose double raises on
+read (a BytesIO cannot show the difference, so the obvious streaming test passes
+either way).
+
+Four larger changes were considered and not landed, each needing a bake plus a
+live run: redrawing the out/ trust boundary (per-pass drop dirs + a ubuntu-only
+out/, which would delete clear_out_path and ~6 other guards, ~95 lines), moving
+findings validation into the driver's TS validators (~48), dropping the cross-cut
+per-file ledger (~12, and ~20k output tokens per large review), and root-owning
+pi's agent config instead of scrubbing it per pass (~12). These were briefly
+recorded in ops/TECH_DEBT.md and then removed: that file is for incidental
+discoveries made while doing something else, not for a single PR's deferred scope.
+The facts that matter live in [[scv]] and in comments at the point of use.
+
+## 2026-07-29 — SCV confidence floor + cost rebalance (ENG-13153)
+
+Two asks: more comments per review, and cheaper reviews. Floor dropped 70→50 with
+two new bands below `mild` (speculative 50–59, tentative 60–69); the 70+ thresholds
+are unchanged so nothing that was postable changes label. The rubric in
+review-judge.md now says to use the whole range and not to round a 55 up to 70,
+which is the part that actually moves the distribution.
+
+Cost: solved the mix from two observed reviews rather than guessing — ~70% of spend
+is output tokens (mostly xhigh thinking) at opus's $25/M, only ~30% cache reads. So
+attackers moved to sonnet at `high` thinking and the judge kept opus at `xhigh`,
+projecting ~$6–8 from $14–17. Recorded in [[scv]] that model and thinking must move
+together: sonnet declares only `max` in its thinkingLevelMap and pi's clamp walks
+forward, so `xhigh` on sonnet resolves UP to `max`. Also dropped the cross-cut
+per-file ledger (~20k output tokens on a large PR, for coverage accounting
+coverage.json never read).
+
+## 2026-08-06 — Client analytics events API (ENG-12206)
+
+Added a "Backend client events API" section to [[feature-flags-and-analytics]].
+New endpoint `POST /api/analytics/v1/events` (commit 463c5df1d9): client
+libraries record caller-named Amplitude events with a Sift API key; the
+backend decorates with org, user, client, and environment. MCP server is the
+first consumer; names are free-form by explicit decision (Evan), validated
+for length and printability only.
+
+## 2026-08-06 — ENG-12206 review round: allowlisted event names
+
+Code review flagged that free-form names made the per-(org, event) budget,
+Prometheus labels, and Amplitude event types unbounded. Evan switched the
+design to a closed allowlist: `User called MCP tool <tool>` for the 35 tools
+in the sift MCP catalog, mirrored into `mcpToolNames` in the handler.
+Updated the [[feature-flags-and-analytics]] section accordingly.

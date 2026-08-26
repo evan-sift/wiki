@@ -15,7 +15,7 @@
 - [[rich-text-editor-options]] - Rich text editor tradeoffs and adapter boundaries
 - [[chat-event-types]] - Recipe for adding streaming event types end to end
 - [[reactor-adding-tools]] - Checklist for adding typed Reactor tools and resource refs
-- [[scv]] - SCV operations: bake/deploy commands, canary/stable channels, code-over-RFC divergences
+- [[scv]] - review-only PR bot (ENG-12894 pare-down): name-mutex dedupe, bake/deploy, operator CLI
 - [[sift-domain-concepts]] - Core data model: asset, run, family, channel, rule, annotation, report
 
 ## frontend
@@ -92,7 +92,7 @@
 
 ## infrastructure
 
-- [[scv]] - SCV operations: bake/deploy commands, canary/stable channels, code-over-RFC divergences
+- [[scv]] - review-only PR bot (ENG-12894 pare-down): name-mutex dedupe, bake/deploy, operator CLI
 
 ## domain-concepts
 
@@ -115,6 +115,6 @@
 
 ## agents
 
-- [[scv]] - SCV operations: bake/deploy commands, canary/stable channels, code-over-RFC divergences
+- [[scv]] - review-only PR bot (ENG-12894 pare-down): name-mutex dedupe, bake/deploy, operator CLI
 - [[coding-sandbox]] - Coding sandbox gotchas and supersession history (opencode relay, agent pod leasing)
 - [[reactor-eval-runner]] - Notion-driven harness for evaluating the Sift agent end to end

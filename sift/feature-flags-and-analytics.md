@@ -9,7 +9,7 @@ sources:
   - path: internal-docs/src/web-app/25-amplitude-best-practices.md
     last_read: 2026-04-12
 created: 2026-04-12
-updated: 2026-04-12
+updated: 2026-08-06
 last_accessed: 2026-05-07
 ---
 
@@ -45,3 +45,23 @@ events.annotationCreated();
 ```
 
 Analytics patterns are subject to change — consult the Product team before adding events.
+
+## Backend client events API (ENG-12206)
+
+`POST /api/analytics/v1/client-events` lets client libraries (the Sift MCP server
+first) record Amplitude events with a Sift API key. Payload: `{"event"}`;
+the reporting library self-identifies via the User-Agent header's first
+product token (`name/version`, e.g. `sift_mcp/0.4.0`), emitted as
+`client_library`/`client_version` (the `client` property stays the
+server-derived origin; version may be empty). The handler
+(`web-service/handlers/analytics_events.go`) validates `event` against
+a closed allowlist of exact event-name strings (`allowedClientEventNames`) —
+currently `User called MCP tool <tool>` for every tool in the sift MCP
+catalog, mirrored from the sift repo's
+`rust/crates/sift_mcp/src/tool/*/mod.rs`
+(new MCP tools need a matching entry or their events get 400s). It then
+calls `TrackClientEvent` on the backend `AnalyticsService`
+(`web-service/services/analytics.go`), which decorates the event with
+organization, user, client origin, and `environment` (`AZIMUTH_ENVIRONMENT`).
+ONESHOT emission with the standard per-(org, event) hourly budget. Contract
+doc: `internal-docs/src/amplitude/client-events-api.md`.

@@ -5,14 +5,14 @@ sources:
   - path: containers/coding_sandbox/
     last_read: 2026-06-18
   - path: services/chat/sandbox/
-    last_read: 2026-06-18
+    last_read: 2026-08-18
   - path: web-service/docker.local.env
     last_read: 2026-06-11
   - path: database/migrations/
     last_read: 2026-06-30
 created: 2026-06-11
-updated: 2026-07-06
-last_accessed: 2026-07-06
+updated: 2026-08-18
+last_accessed: 2026-08-18
 ---
 
 The Sift Agents Coding Sandbox (ENG-12084) runs opencode + the Sift CLI/MCP
@@ -72,7 +72,11 @@ superseded models:
    Per-conversation AGENT `UserCodeExecution` dispatched through pyworker;
    `sandbox_leases` table (migration `20260618000000`) with status enum
    `BUSY|IDLE|AWAITING_HUMAN` plus a `LeaseReaper`.
-3. **Warm-pool autoscaling (Plan B, 2026-06-30) — current.** `agent_pod_leases`
+3. **Warm-pool autoscaling (Plan B, 2026-06-30) — branch-only, NOT on main.**
+   None of this phase's lease/KEDA/endpoint-registration work merged; what IS
+   on main from the agents effort: `uce_runner/agent_server` (Node SSE chat
+   server, `:2633`), the `sift_agents` image, the LLM proxy, and the
+   `uce-timeout-agentics-seconds` flag. Details as designed: `agent_pod_leases`
    (migration `20260627000000`) supersedes `sandbox_leases`: one active lease
    per conversation tracking `pod_endpoint` + `last_heartbeat_at`. Migration
    `20260630000000` adds `session_secret` (pod-driven release auth) and two
@@ -85,6 +89,28 @@ superseded models:
    functions) does not exist in the plain local docker-compose bootstrap
    (`read_write_user` does); it is granted conditionally on-prem via migration
    `20251031112125_eng_4411`.
+4. **AGENT UCE type in the new UCE code (ENG-13579, 2026-08-09) — current.**
+   `AGENT` lands as a first-class execution type in the rebuilt UCE system:
+   proto enum value + `user_code_execution_type` DB value (migration
+   `20260809000000`), `exec_handler_agents.go` in the Go handler registry
+   (timeout flag `uce-timeout-agentics-seconds`), and a poller
+   `dispatch_agent` path where the executor `os.execve`s the Node agent
+   server — the poller's timeout SIGKILL hits the server directly, and
+   reaching the agentics timeout reports `EXECUTION_ENDED`, not error (the
+   server has no self-exit). The same branch adds pool separation: dequeue
+   takes `execution_types` (empty = the legacy `RULE,CANVAS` pool; AGENT work
+   is only served to pods that ask for it explicitly — an old-image runner
+   polling untyped stole and failed an AGENT job before this guard), runner
+   pools declare theirs via `UCE_EXECUTION_TYPES`, and a `sift-agents` klu
+   Deployment (gated on `sift_agents.enabled`; in kind it rides the LLM proxy
+   opt-in) serves AGENT jobs while the uce-runner pool pins `RULE,CANVAS`.
+   Chat-backend dispatch (ENG-12831/12838 stack branches) was proven e2e on
+   kind 2026-08-18: `handleSandboxChat` → `sandbox.Dispatcher` must COMMIT the
+   ambient tx after enqueueing (the pool dequeues from its own request; an
+   uncommitted row waits out the pod-wait timeout and rolls back) and needs
+   the keepalive ticker started before the sandbox dispatch (nginx/ALB cut
+   the idle stream at 60s during the pod wait). One warm replica = one live
+   conversation; kind runs 3.
 
 The container image cannot use python-runner's chainguard `python-fips` base
 (opencode needs a node/opencode base); it is read-only-rootfs compatible and
