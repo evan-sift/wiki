@@ -128,7 +128,8 @@ superseded models:
    reload makes the real one a cache hit), and the per-job credential arrives
    as one JSON line on stdin at dispatch (`dispatch_agent`). `/healthz` is 503
    until the credential lands. `executor.py` no longer has an agent branch.
-   The pod streams `status` (`restore_workspace`/`start_agent`) and `thinking`
+   The pod streams `status` (`restore_workspace`/`start_agent`, and
+   `model_request` right before the Pi prompt) and `thinking`
    SSE events; the backend relays them as `SessionStatusEvent` (phase
    INITIALIZING for a new conversation, RESUMING for an existing one without a
    live pod; `AcquirePodWithProgress` reports PROVISION_MACHINE) and

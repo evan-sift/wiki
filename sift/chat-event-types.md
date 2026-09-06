@@ -64,7 +64,9 @@ Ask up front which bucket your new type falls into — the work scales with it:
 - **Streaming-only** (fire-and-forget chunk, no persistence, no replay).
   Examples: `TextChunkEvent`, `SessionStatusEvent` (agent session setup
   progress: phase INITIALIZING/RESUMING, step PROVISION_MACHINE /
-  RESTORE_WORKSPACE / START_AGENT, state STARTED/COMPLETED). Touches proto +
+  RESTORE_WORKSPACE / START_AGENT / MODEL_REQUEST, state STARTED/COMPLETED;
+  MODEL_REQUEST is a flag on the turn in the web app, not a card row, and gates
+  the "Thinking…" indicator). Touches proto +
   LLM layer + `consumeStream` + client rendering. **3 files.** On the sandbox
   path the producer is the pod's SSE stream instead: add the `event:` name to
   `services/chat/sandbox/events.go`, map it in
