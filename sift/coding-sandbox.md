@@ -5,14 +5,18 @@ sources:
   - path: containers/coding_sandbox/
     last_read: 2026-06-18
   - path: services/chat/sandbox/
-    last_read: 2026-08-18
+    last_read: 2026-09-06
+  - path: uce_runner/poller.py
+    last_read: 2026-09-06
+  - path: uce_runner/agent_server/src/
+    last_read: 2026-09-06
   - path: web-service/docker.local.env
     last_read: 2026-06-11
   - path: database/migrations/
     last_read: 2026-06-30
 created: 2026-06-11
-updated: 2026-08-18
-last_accessed: 2026-08-18
+updated: 2026-09-06
+last_accessed: 2026-09-06
 ---
 
 The Sift Agents Coding Sandbox (ENG-12084) runs opencode + the Sift CLI/MCP
@@ -111,6 +115,27 @@ superseded models:
    the keepalive ticker started before the sandbox dispatch (nginx/ALB cut
    the idle stream at 60s during the pod wait). One warm replica = one live
    conversation; kind runs 3.
+
+5. **Pre-booted agent server + session status (ENG-14322/ENG-14321, 2026-09-06).**
+   The warm pool used to pre-warm only the Python poller: on the first message
+   the poller spawned a Python executor that `execve`d node, and everything
+   Node-side (tsx transpile, jiti compile of pi-mcp-adapter, Pi session) ran
+   behind the user's message — 18.6s from Chat request to first LLM call on
+   kind. Now the poller spawns node at boot (`AgentServerProcess` in
+   `uce_runner/poller.py`, `AGENT_CREDENTIALS_ON_STDIN=1`), node prewarms the
+   credential-free parts (`prewarmAgentRuntime`: pi caches compiled extension
+   factories per `(cwd, generation)`, so a throwaway `DefaultResourceLoader`
+   reload makes the real one a cache hit), and the per-job credential arrives
+   as one JSON line on stdin at dispatch (`dispatch_agent`). `/healthz` is 503
+   until the credential lands. `executor.py` no longer has an agent branch.
+   The pod streams `status` (`restore_workspace`/`start_agent`) and `thinking`
+   SSE events; the backend relays them as `SessionStatusEvent` (phase
+   INITIALIZING for a new conversation, RESUMING for an existing one without a
+   live pod; `AcquirePodWithProgress` reports PROVISION_MACHINE) and
+   `ThinkingChunkEvent`. Dequeue idle sleep is `UCE_DEQUEUE_IDLE_SLEEP_S`
+   (0.25s for uce-agents). sift-cli's MCP tool list depends on the key (51 vs
+   41 tools with a placeholder), so the metadata-cache seed must wait for the
+   real credential.
 
 The container image cannot use python-runner's chainguard `python-fips` base
 (opencode needs a node/opencode base); it is read-only-rootfs compatible and

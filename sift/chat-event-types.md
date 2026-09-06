@@ -3,7 +3,7 @@ title: Adding Chat Event Types
 tags: [chat, backend, architecture]
 sources:
   - path: protos/sift_internal/chat/v1/chat.proto
-    last_read: 2026-05-21
+    last_read: 2026-09-06
   - path: services/chat/llm/types.go
     last_read: 2026-04-18
   - path: services/chat/llm/complete.go
@@ -13,7 +13,7 @@ sources:
   - path: services/chat/v1/chat_service.go
     last_read: 2026-05-21
 created: 2026-04-18
-updated: 2026-07-06
+updated: 2026-09-06
 last_accessed: 2026-07-06
 ---
 
@@ -62,9 +62,16 @@ in lockstep:
 Ask up front which bucket your new type falls into — the work scales with it:
 
 - **Streaming-only** (fire-and-forget chunk, no persistence, no replay).
-  Examples: `TextChunkEvent`, a hypothetical `ProgressEvent` or
-  `CitationEvent`. Touches proto + LLM layer + `consumeStream` + client
-  rendering. **3 files.**
+  Examples: `TextChunkEvent`, `SessionStatusEvent` (agent session setup
+  progress: phase INITIALIZING/RESUMING, step PROVISION_MACHINE /
+  RESTORE_WORKSPACE / START_AGENT, state STARTED/COMPLETED). Touches proto +
+  LLM layer + `consumeStream` + client rendering. **3 files.** On the sandbox
+  path the producer is the pod's SSE stream instead: add the `event:` name to
+  `services/chat/sandbox/events.go`, map it in
+  `services/chat/v1/sandbox_turn.go`, and in the web app add a
+  `ConversationDeltaEvent` in `conversationService.types.ts`, a worker case
+  in `conversationService.worker.ts`, and a reducer action in
+  `useChatStream.ts`.
 - **Streaming + tool invocation** (multi-stage: start → args → result).
   Example: `ToolCallStartEvent` / `ToolCallResultEvent`. Adds a
   `ContentToolUse` / `ContentToolResult` block that must replay, plus a
